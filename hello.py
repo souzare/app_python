@@ -17,4 +17,4 @@ def index():
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
     REQUESTS.inc()
-    return render_template('index.html')
+    return render_template('index.html', posts=posts)
