@@ -1,5 +1,6 @@
 from flask import Flask, render_template
 import sqlite3
+import os
 from prometheus_client import Counter #Prometheus lib
 from prometheus_flask_exporter import PrometheusMetrics
 
@@ -18,3 +19,7 @@ def index():
     conn.close()
     REQUESTS.inc()
     return render_template('index.html', posts=posts)
+
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
