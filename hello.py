@@ -9,7 +9,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-REQUESTS = Counter("requests_total", "Total number of requests made")
+REQUESTS = Counter("requests_total", "Total number of requests made") #metricas do prmetheus
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
 @app.route('/')
@@ -17,7 +17,7 @@ def index():
     conn = get_db_connection()
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
-    REQUESTS.inc()
+    REQUESTS.inc() #metricas do prmetheus
     return render_template('index.html', posts=posts)
 
 if __name__ == "__main__":
