@@ -36,4 +36,7 @@ def not_found():
     ERRORS.labels(error_type="404").inc()
     return "Not Found", 404
 
+metrics.register_endpoint('/error')  # Register the /error endpoint for metrics
+metrics.register_endpoint('/notfound')  # Register the /notfound endpoint for metrics
+
 app.run(host='0.0.0.0', port=5000)
