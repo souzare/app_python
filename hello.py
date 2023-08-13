@@ -24,13 +24,13 @@ def index():
     REQUEST.inc()
     return render_template('index.html', posts=posts)
 
-@app.errorhandler(404)
+@app.route('/')
 def error():
     # Simulate a 500 Internal Server Error
     ERRORS.labels(error_type="500").inc()
     return "Internal Server Error", 500
 
-@app.errorhandler(500)
+@app.route('/')
 def not_found():
     # Simulate a 404 Not Found Error
     ERRORS.labels(error_type="404").inc()
