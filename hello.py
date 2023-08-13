@@ -14,7 +14,7 @@ metrics = PrometheusMetrics(app)
 
 REQUEST = Counter("http_requests_total", "Total number of requests made")
 LATENCY = Histogram("http_request_duration_seconds", "Request latency in seconds")
-ERRORS = Counter("http_request_errors_total", "Total number of request errors", ["error_type"])
+ERRORS = Counter("http_request_errors_total", "Total number of request errors")
 
 @app.route('/')
 def index():
