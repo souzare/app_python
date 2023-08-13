@@ -2,6 +2,7 @@ from flask import Flask, render_template
 import sqlite3
 import os
 from prometheus_client import Counter, generate_latest
+from flask import Flask, render_template, Response
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
