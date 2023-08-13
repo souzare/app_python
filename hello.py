@@ -9,7 +9,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-REQUESTS = Counter("requests_total", "Total number of requests made") #metricas do prmetheus
+REQUESTS = Counter("http_requests_total", "Total number of requests made") #metricas do prmetheus
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
 @app.route('/')
