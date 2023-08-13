@@ -36,8 +36,4 @@ def not_found():
     ERRORS.labels(error_type="404").inc()
     return "Not Found", 404
 
-# Aqui, registramos apenas os endpoints personalizados sem interferir no endpoint prometheus_metrics
-metrics.register_endpoint('/error', 'error')
-metrics.register_endpoint('/notfound', 'not_found')
-
 app.run(host='0.0.0.0', port=5000)
