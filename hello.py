@@ -36,13 +36,15 @@ def index():
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
     REQUEST.inc()
+
+    # Definir o valor da métrica de Gauge
+    POSTS_COUNT.set(len(posts))
     
     # Simulating latency measurement
     with LATENCY.time():
         return render_template('index.html', posts=posts)
 
-    # Definir o valor da métrica de Gauge
-    POSTS_COUNT.set(len(posts))
+    
 
     return render_template('index.html', posts=posts)
 
