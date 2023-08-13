@@ -22,7 +22,7 @@ def index():
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
     REQUEST.inc()
-    return render_template('indexs.html', posts=posts)
+    return render_template('index.html', posts=posts)
 
 @app.route('/error')
 def error():
