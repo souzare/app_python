@@ -2,6 +2,23 @@ from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
 import os
+from elasticapm.contrib.flask import ElasticAPM
+app = Flask(__name__)
+apm = ElasticAPM(app)
+
+#monitoramento Elastic
+from elasticapm.contrib.flask import ElasticAPM
+app.config['ELASTIC_APM'] = {
+  'SERVICE_NAME': 'FlaskPython',
+
+  'SECRET_TOKEN': 'ePqEgkp1QESVHzKNwK',
+
+  'SERVER_URL': 'https://83bdca7098464ab69ad360be80950c3d.apm.us-east-2.aws.elastic-cloud.com:443',
+
+  'ENVIRONMENT': 'dev',
+}
+
+apm = ElasticAPM(app)
 
 
 def get_db_connection():
