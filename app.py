@@ -9,13 +9,13 @@ apm = ElasticAPM(app)
 #monitoramento Elastic
 from elasticapm.contrib.flask import ElasticAPM
 app.config['ELASTIC_APM'] = {
-  'SERVICE_NAME': 'FlaskPython',
+  'SERVICE_NAME': 'my-service-name',
 
-  'SECRET_TOKEN': 'ePqEgkp1QESVHzKNwK',
+  'SECRET_TOKEN': '',
 
-  'SERVER_URL': 'https://83bdca7098464ab69ad360be80950c3d.apm.us-east-2.aws.elastic-cloud.com:443',
+  'SERVER_URL': 'http://44.203.30.52:8200/',
 
-  'ENVIRONMENT': 'dev',
+  'ENVIRONMENT': 'my-environment',
 }
 
 apm = ElasticAPM(app)
