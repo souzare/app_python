@@ -11,9 +11,9 @@ from elasticapm.contrib.flask import ElasticAPM
 app.config['ELASTIC_APM'] = {
   'SERVICE_NAME': 'my-service-name',
 
-  'SECRET_TOKEN': '',
+  'SECRET_TOKEN': 'ePqEgkp1QESVHzKNwK',
 
-  'SERVER_URL': 'http://44.203.30.52:8200',
+  'SERVER_URL': 'https://83bdca7098464ab69ad360be80950c3d.apm.us-east-2.aws.elastic-cloud.com:443',
 
   'ENVIRONMENT': 'my-environment',
 }
