@@ -13,7 +13,7 @@ app.config['ELASTIC_APM'] = {
 
   'SECRET_TOKEN': '',
 
-  'SERVER_URL': 'http://44.203.30.52:8200/',
+  'SERVER_URL': 'http://44.203.30.52:8200',
 
   'ENVIRONMENT': 'my-environment',
 }
