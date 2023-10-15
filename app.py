@@ -8,7 +8,7 @@ app.config['SECRET_KEY'] = '1234'
 #monitoramento Elastic
 from elasticapm.contrib.flask import ElasticAPM
 app.config['ELASTIC_APM'] = {
-  'SERVICE_NAME': 'Python',
+  'SERVICE_NAME': 'python',
 
   'SECRET_TOKEN': 'ePqEgkp1QESVHzKNwK',
 
