@@ -112,4 +112,4 @@ def not_found():
     # Simulate a 404 Not Found Error
     return "Not Found", 404
 
-app.run(host='172.31.4.126', port=5000)
+app.run(host='44.203.30.52', port=5000)
