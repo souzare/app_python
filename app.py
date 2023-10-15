@@ -14,7 +14,7 @@ app.config['ELASTIC_APM'] = {
 
   'SERVER_URL': 'https://83bdca7098464ab69ad360be80950c3d.apm.us-east-2.aws.elastic-cloud.com:443',
 
-  'ENVIRONMENT': 'my-environment',
+  'ENVIRONMENT': 'Dev',
 }
 
 apm = ElasticAPM(app)
