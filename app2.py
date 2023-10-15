@@ -1,12 +1,9 @@
-from flask import Flask, render_template, request, url_for, flash, redirect
-from werkzeug.exceptions import abort
-import sqlite3
-import os
+from flask import Flask
+from elasticapm.contrib.flask import ElasticAPM
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = '1234'
+
 #monitoramento Elastic
-from elasticapm.contrib.flask import ElasticAPM
 app.config['ELASTIC_APM'] = {
   'SERVICE_NAME': 'Python',
 
@@ -19,17 +16,8 @@ app.config['ELASTIC_APM'] = {
 apm = ElasticAPM(app)
 
 @app.route('/')
-def hello():
+def index():
     return 'Hello, World!'
 
-@app.route('/error')
-def error():
-    # Simulate a 500 Internal Server Error
-    return "Internal Server Error", 500
-
-@app.route('/notfound')
-def not_found():
-    # Simulate a 404 Not Found Error
-    return "Not Found", 404
-
-app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
