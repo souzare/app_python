@@ -3,10 +3,8 @@ from werkzeug.exceptions import abort
 import sqlite3
 import os
 
-from elasticapm.contrib.flask import ElasticAPM
 app = Flask(__name__)
-apm = ElasticAPM(app)
-
+app.config['SECRET_KEY'] = '1234'
 #monitoramento Elastic
 from elasticapm.contrib.flask import ElasticAPM
 app.config['ELASTIC_APM'] = {
@@ -36,8 +34,7 @@ def get_post(post_id):
         abort(404)
     return post
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = '1234'
+
 
 
 @app.route('/')
