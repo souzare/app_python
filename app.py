@@ -2,14 +2,12 @@ from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
 import os
-from elasticapm.contrib.flask import ElasticAPM
 app = Flask(__name__)
-apm = ElasticAPM(app)
 
 #monitoramento Elastic
 from elasticapm.contrib.flask import ElasticAPM
 app.config['ELASTIC_APM'] = {
-  'SERVICE_NAME': 'my-service-name',
+  'SERVICE_NAME': 'Python',
 
   'SECRET_TOKEN': 'ePqEgkp1QESVHzKNwK',
 
