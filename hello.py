@@ -32,9 +32,9 @@ POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
 @app.route('/')
 def index():
-    conn = get_db_connection()
-    posts = conn.execute('SELECT * FROM posts').fetchall()
-    conn.close()
+    #conn = get_db_connection()
+    #posts = conn.execute('SELECT * FROM posts').fetchall()
+    #conn.close()
     REQUEST.inc()
 
     # Definir o valor da métrica de Gauge
