@@ -28,7 +28,7 @@ LATENCY = Histogram("http_request_duration_seconds", "Request latency in seconds
 ERRORS = Counter("http_request_errors_total", "Total number of request errors", ["error_type"])
 
 # Métrica Gauge para monitorar o número de posts
-POSTS_COUNT = Gauge("posts_count", "Current number of posts")
+#POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
 @app.route('/')
 def index():
@@ -38,13 +38,13 @@ def index():
     REQUEST.inc()
 
     # Definir o valor da métrica de Gauge
-    POSTS_COUNT.set(len(posts))
+    #POSTS_COUNT.set(len(posts))
     
     # Simulating latency measurement
     with LATENCY.time():
-        return render_template('index.html', posts=posts)
+        return render_template('index.html')
 
-    return render_template('index.html', posts=posts)
+    return render_template('index.html')
 
 @app.route('/<int:post_id>')
 def post(post_id):
