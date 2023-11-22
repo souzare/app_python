@@ -32,9 +32,9 @@ ERRORS = Counter("http_request_errors_total", "Total number of request errors", 
 
 @app.route('/')
 def index():
-    conn = get_db_connection()
-    posts = conn.execute('SELECT * FROM posts').fetchall()
-    conn.close()
+    # conn = get_db_connection()
+    # posts = conn.execute('SELECT * FROM posts').fetchall()
+    # conn.close()
     REQUEST.inc()
 
     # Definir o valor da métrica de Gauge
@@ -42,9 +42,9 @@ def index():
     
     # Simulating latency measurement
     with LATENCY.time():
-        return render_template('index.html', posts=posts)
+        return render_template('index.html')
 
-    return render_template('index.html', posts=posts)
+    return render_template('index.html')
 
 @app.route('/<int:post_id>')
 def post(post_id):
