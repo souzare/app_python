@@ -44,7 +44,7 @@ def index():
     with LATENCY.time():
         return render_template('index.html')
 
-    return render_template('index.html')
+    #return render_template('index.html')
 
 @app.route('/<int:post_id>')
 def post(post_id):
