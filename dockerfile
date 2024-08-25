@@ -4,6 +4,7 @@ FROM python:3.8-alpine
 # copy the requirements file into the image
 COPY ./requirements.txt /app/requirements.txt
 COPY ./initdb.py /app/initdb.py
+COPY ./schema.sql /app/schema.sql
 
 # switch working directory
 WORKDIR /app
