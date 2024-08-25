@@ -19,4 +19,4 @@ COPY . /app
 # configure the container to run in an executed manner
 ENTRYPOINT [ "python" ]
 
-CMD ["DD_SERVICE=flask DD_ENV=prod DD_LOGS_INJECTION=true ddtrace-run python hello_dd.py"]
+CMD ["hello_dd.py"]
