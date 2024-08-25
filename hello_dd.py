@@ -2,8 +2,7 @@ from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
 import os
-from prometheus_client import Counter, Histogram, Gauge
-from prometheus_flask_exporter import PrometheusMetrics
+from datadog import initialize, statsd
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
@@ -19,32 +18,31 @@ def get_post(post_id):
         abort(404)
     return post
 
+# Configurações do Datadog
+options = {
+    'statsd_host': 'ip-172-31-9-121.ec2.internal',  # ou o host onde seu agente Datadog está rodando
+    'statsd_port': 8125
+}
+initialize(**options)
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '1234'
-metrics = PrometheusMetrics(app)
-
-REQUEST = Counter("http_requests_total", "Total number of requests made")
-LATENCY = Histogram("http_request_duration_seconds", "Request latency in seconds")
-ERRORS = Counter("http_request_errors_total", "Total number of request errors", ["error_type"])
-
-# Métrica Gauge para monitorar o número de posts
-POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
 @app.route('/')
 def index():
     conn = get_db_connection()
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
-    REQUEST.inc()
-
-    # Definir o valor da métrica de Gauge
-    POSTS_COUNT.set(len(posts))
     
-    # Simulating latency measurement
-    with LATENCY.time():
-        return render_template('index.html', posts=posts)
-
-    return render_template('index.html', posts=posts)
+    # Incrementar o contador de requisições
+    statsd.increment('http.requests.total')
+    
+    # Monitorar o número atual de posts
+    statsd.gauge('posts.count', len(posts))
+    
+    # Medir a latência
+    with statsd.timed('http.request.duration'):
+        return render_template('index.html')
 
 @app.route('/<int:post_id>')
 def post(post_id):
@@ -102,13 +100,13 @@ def delete(id):
 @app.route('/error')
 def error():
     # Simulate a 500 Internal Server Error
-    ERRORS.labels(error_type="500").inc()
+    statsd.increment('http.request.errors', tags=["error_type:500"])
     return "Internal Server Error", 500
 
 @app.route('/notfound')
 def not_found():
     # Simulate a 404 Not Found Error
-    ERRORS.labels(error_type="404").inc()
+    statsd.increment('http.request.errors', tags=["error_type:404"])
     return "Not Found", 404
 
 app.run(host='0.0.0.0', port=5000)

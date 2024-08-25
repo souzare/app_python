@@ -19,4 +19,4 @@ COPY . /app
 # configure the container to run in an executed manner
 ENTRYPOINT [ "python" ]
 
-CMD ["hello.py" ]
+CMD ["hello_dd.py" ]
