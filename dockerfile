@@ -9,7 +9,7 @@ WORKDIR /app
 
 # install the dependencies and packages in the requirements file
 RUN pip install -r requirements.txt
-
+RUN sudo apt-get install -y sqlite3 libsqlite3-dev
 RUN python initdb.py
 
 # copy every content from the local file to the image
