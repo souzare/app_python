@@ -1,4 +1,5 @@
-# filepath: /c:/GitRepo/app_python/app_v1.py
+# filepath: /c:/GitRepo/app_python/app.py
+import time
 from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
@@ -6,8 +7,8 @@ import os
 from prometheus_client import Counter, Histogram, Gauge
 from prometheus_flask_exporter import PrometheusMetrics
 from opentelemetry import trace, metrics
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -30,22 +31,6 @@ def get_post(post_id):
         abort(404)
     return post
 
-# Configure the tracer provider and exporter
-resource = Resource(attributes={
-    "service.name": "app_python"
-})
-trace.set_tracer_provider(TracerProvider(resource=resource))
-tracer_provider = trace.get_tracer_provider()
-otlp_trace_exporter = OTLPSpanExporter(endpoint="http://otel-collector:4317", insecure=True)
-span_processor = BatchSpanProcessor(otlp_trace_exporter)
-tracer_provider.add_span_processor(span_processor)
-
-# Configure the meter provider and exporter
-otlp_metric_exporter = OTLPMetricExporter(endpoint="http://otel-collector:4317", insecure=True)
-metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter)
-meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
-metrics.set_meter_provider(meter_provider)
-
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '1234'
 metrics = PrometheusMetrics(app)
@@ -61,9 +46,14 @@ POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
 @app.before_request
 def before_request():
-    if request.endpoint:
-        REQUEST.inc()
-        LATENCY.observe(request.endpoint)
+    request.start_time = time.time()
+    REQUEST.inc()
+
+@app.after_request
+def after_request(response):
+    request_latency = time.time() - request.start_time
+    LATENCY.observe(request_latency)
+    return response
 
 @app.route('/')
 def index():
