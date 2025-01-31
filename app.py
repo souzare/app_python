@@ -14,6 +14,8 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.wsgi import OpenTelemetryMiddleware
 import time
+from flask import Flask, render_template, request, url_for, flash, redirect
+from werkzeug.exceptions import abort
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
