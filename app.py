@@ -50,12 +50,12 @@ resource = Resource(attributes={
 })
 trace.set_tracer_provider(TracerProvider(resource=resource))
 tracer_provider = trace.get_tracer_provider()
-otlp_trace_exporter = OTLPSpanExporter(endpoint="0.0.0.0:4317", insecure=True)
+otlp_trace_exporter = OTLPSpanExporter(endpoint="127.0.0.1:4317", insecure=True)
 span_processor = BatchSpanProcessor(otlp_trace_exporter)
 tracer_provider.add_span_processor(span_processor)
 
 # Configure the meter provider and exporter
-otlp_metric_exporter = OTLPMetricExporter(endpoint="0.0.0.0:4317", insecure=True)
+otlp_metric_exporter = OTLPMetricExporter(endpoint="127.0.0.1:4317", insecure=True)
 metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter)
 meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
 metrics.set_meter_provider(meter_provider)
