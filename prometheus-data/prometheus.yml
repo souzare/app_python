@@ -1,29 +1,12 @@
 global:
   scrape_interval: 5s
+  evaluation_interval: 5s
+
 scrape_configs:
-- job_name: prometheus
-  honor_timestamps: true
-  scrape_interval: 30s
-  scrape_timeout: 10s
-  metrics_path: /metrics
-  scheme: http
-  follow_redirects: true
-  enable_http2: true
-  static_configs:
-  - targets:
-    - localhost:9090
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:9464']
 
-- job_name : app_python
-  static_configs:
-  - targets:
-    - 98.80.144.222:5000
-
-- job_name: node-interno
-  static_configs:
-  - targets: 
-    - 172.31.87.150:9100
-
-- job_name: cadvisor
-  static_configs:
-  - targets:
-    - 172.31.87.150:8081
+  - job_name: 'flask-app'
+    static_configs:
+      - targets: ['app_python:5000']

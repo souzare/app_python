@@ -7,3 +7,8 @@ MarkupSafe==2.1.3
 prometheus-client==0.17.1
 prometheus-flask-exporter==0.22.4
 Werkzeug==2.3.6
+opentelemetry-sdk
+opentelemetry-instrumentation-flask
+opentelemetry-instrumentation-sqlite3
+opentelemetry-exporter-otlp
+opentelemetry-exporter-otlp-proto-grpc

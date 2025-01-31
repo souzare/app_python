@@ -11,7 +11,7 @@ COPY ./schema.sql /app/schema.sql
 WORKDIR /app
 
 # install the dependencies and packages in the requirements file
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 RUN python initdb.py
 
 # copy every content from the local file to the image
