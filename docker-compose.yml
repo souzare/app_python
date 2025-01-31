@@ -11,7 +11,7 @@ services:
       - "55680:55680" # OpenCensus
       - "9464:9464" # Prometheus Exporter
     networks:
-      - monitoring
+      - app_python_monitoring
       
 
   app_python:
@@ -21,7 +21,7 @@ services:
     depends_on:
       - otel-collector
     networks:
-      - monitoring
+      - app_python_monitoring
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_RESOURCE_ATTRIBUTES=service.name=app_python
@@ -43,7 +43,7 @@ services:
     depends_on:
       - otel-collector
     networks:
-      - monitoring
+      - app_python_monitoring
 
   grafana:
     image: grafana/grafana:latest
@@ -55,7 +55,7 @@ services:
     depends_on:
       - prometheus
     networks:
-      - monitoring
+      - app_python_monitoring
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
 
@@ -72,10 +72,10 @@ services:
       - "6832:6832/udp"
       - "9411:9411"
     networks:
-      - monitoring
+      - app_python_monitoring
 
 networks:
-  monitoring:
+  app_python_monitoring:
 
 volumes:
   grafana-storage:
