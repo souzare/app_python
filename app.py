@@ -1,4 +1,4 @@
-# filepath: /C:/GitRepo/app_python/app.py
+# filepath: /c:/GitRepo/app_python/app.py
 from flask import Flask
 from opentelemetry import trace, metrics
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -22,11 +22,10 @@ span_processor = BatchSpanProcessor(otlp_trace_exporter)
 tracer_provider.add_span_processor(span_processor)
 
 # Configure the meter provider and exporter
-metrics.set_meter_provider(MeterProvider(resource=resource))
-meter_provider = metrics.get_meter_provider()
 otlp_metric_exporter = OTLPMetricExporter(endpoint="http://otel-collector:4317", insecure=True)
 metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter)
-meter_provider.start_pipeline(metric_reader, 60)
+meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+metrics.set_meter_provider(meter_provider)
 
 app = Flask(__name__)
 FlaskInstrumentor().instrument_app(app)
