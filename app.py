@@ -1,5 +1,4 @@
-# filepath: /c:/GitRepo/app_python/app.py
-from flask import Flask
+from flask import Flask, render_template, request, url_for, flash, redirect
 from opentelemetry import trace, metrics
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
