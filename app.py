@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, url_for, flash, redirect
+# filepath: /c:/GitRepo/app_python/app.py
+from flask import Flask, request
 from opentelemetry import trace, metrics
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
@@ -40,7 +41,8 @@ request_counter = meter.create_counter(
 
 @app.before_request
 def before_request():
-    request_counter.add(1, {"endpoint": request.endpoint})
+    if request.endpoint:
+        request_counter.add(1, {"endpoint": request.endpoint})
 
 # ...existing code...
 
