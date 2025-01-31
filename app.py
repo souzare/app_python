@@ -1,23 +1,36 @@
 from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
-import os
 from prometheus_client import Counter, Histogram, Gauge
 from prometheus_flask_exporter import PrometheusMetrics
+from opentelemetry import trace, metrics
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 
-def get_db_connection():
-    conn = sqlite3.connect('database.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+# Configurar OpenTelemetry
+resource = Resource.create({"service.name": "flask-blog-app"})
 
-def get_post(post_id):
-    conn = get_db_connection()
-    post = conn.execute('SELECT * FROM posts WHERE id = ?',
-                        (post_id,)).fetchone()
-    conn.close()
-    if post is None:
-        abort(404)
-    return post
+# Tracing
+trace.set_tracer_provider(TracerProvider(resource=resource))
+tracer = trace.get_tracer(__name__)
+span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
+trace.get_tracer_provider().add_span_processor(span_processor)
+
+# Métricas
+metrics.set_meter_provider(MeterProvider(resource=resource))
+meter = metrics.get_meter(__name__)
+metric_exporter = OTLPMetricExporter(endpoint="http://otel-collector:4317")
+metrics.get_meter_provider().start_pipeline(meter, metric_exporter, 5)
+
+# Instrumentação automática
+FlaskInstrumentor().instrument_app(app)
+SQLite3Instrumentor().instrument()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '1234'
@@ -32,85 +45,47 @@ POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
 @app.route('/')
 def index():
-    conn = get_db_connection()
-    posts = conn.execute('SELECT * FROM posts').fetchall()
-    conn.close()
-    REQUEST.inc()
+    with tracer.start_as_current_span("index"):
+        conn = get_db_connection()
+        posts = conn.execute('SELECT * FROM posts').fetchall()
+        conn.close()
+        REQUEST.inc()
 
-    # Definir o valor da métrica de Gauge
-    POSTS_COUNT.set(len(posts))
-    
-    # Simulating latency measurement
-    with LATENCY.time():
-        return render_template('index.html', posts=posts)
-
-    
-
-    return render_template('index.html', posts=posts)
+        # Definir o valor da métrica de Gauge
+        POSTS_COUNT.set(len(posts))
+        
+        # Simulating latency measurement
+        with LATENCY.time():
+            return render_template('index.html', posts=posts)
 
 @app.route('/<int:post_id>')
 def post(post_id):
-    post = get_post(post_id)
-    return render_template('post.html', post=post)
+    with tracer.start_as_current_span("view_post"):
+        post = get_post(post_id)
+        return render_template('post.html', post=post)
 
 @app.route('/create', methods=('GET', 'POST'))
 def create():
-    if request.method == 'POST':
-        title = request.form['title']
-        content = request.form['content']
+    with tracer.start_as_current_span("create_post"):
+        if request.method == 'POST':
+            title = request.form['title']
+            content = request.form['content']
 
-        if not title:
-            flash('Title is required!')
-        else:
-            conn = get_db_connection()
-            conn.execute('INSERT INTO posts (title, content) VALUES (?, ?)',
-                         (title, content))
-            conn.commit()
-            conn.close()
-            return redirect(url_for('index'))
+            if not title:
+                flash('Title is required!')
+            else:
+                conn = get_db_connection()
+                conn.execute('INSERT INTO posts (title, content) VALUES (?, ?)',
+                             (title, content))
+                conn.commit()
+                conn.close()
+                return redirect(url_for('index'))
     return render_template('create.html')
-
-@app.route('/<int:id>/edit', methods=('GET', 'POST'))
-def edit(id):
-    post = get_post(id)
-
-    if request.method == 'POST':
-        title = request.form['title']
-        content = request.form['content']
-
-        if not title:
-            flash('Title is required!')
-        else:
-            conn = get_db_connection()
-            conn.execute('UPDATE posts SET title = ?, content = ?'
-                         ' WHERE id = ?',
-                         (title, content, id))
-            conn.commit()
-            conn.close()
-            return redirect(url_for('index'))
-
-    return render_template('edit.html', post=post)
-
-@app.route('/<int:id>/delete', methods=('POST',))
-def delete(id):
-    post = get_post(id)
-    conn = get_db_connection()
-    conn.execute('DELETE FROM posts WHERE id = ?', (id,))
-    conn.commit()
-    conn.close()
-    flash('"{}" was successfully deleted!'.format(post['title']))
-    return redirect(url_for('index'))
 
 @app.route('/error')
 def error():
-    # Simulate a 500 Internal Server Error
-    ERRORS.labels(error_type="500").inc()
-    return "Internal Server Error", 500
-
-@app.route('/notfound')
-def not_found():
-    # Simulate a 404 Not Found Error
-    ERRORS.labels(error_type="404").inc()
-    return "Not Found", 404
+    with tracer.start_as_current_span("error_simulation"):
+        ERRORS.labels(error_type="500").inc()
+        return "Internal Server Error", 500
 
 app.run(host='0.0.0.0', port=5000)
