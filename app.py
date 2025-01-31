@@ -1,5 +1,4 @@
 # filepath: /c:/GitRepo/app_python/app.py
-import time
 from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
@@ -16,6 +15,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.wsgi import OpenTelemetryMiddleware
+import time
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
@@ -62,6 +62,11 @@ def index():
     conn.close()
     POSTS_COUNT.set(len(posts))
     return render_template('index.html', posts=posts)
+
+@app.route('/post/<int:post_id>')
+def post(post_id):
+    post = get_post(post_id)
+    return render_template('post.html', post=post)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)
