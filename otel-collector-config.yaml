@@ -6,7 +6,7 @@ receivers:
 
 exporters:
   otlp:
-    endpoint: "jaeger:4317"
+    endpoint: "http://jaeger:14268/api/traces"
     tls:
       insecure: true
   prometheus:
