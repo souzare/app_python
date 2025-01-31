@@ -24,7 +24,7 @@ services:
     networks:
       - monitoring
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - OTEL_RESOURCE_ATTRIBUTES=service.name=app_python
     ports:
       - "5000:5000"
