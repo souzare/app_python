@@ -23,8 +23,8 @@ meter = metrics.get_meter("flask-blog-app")
 # Métricas OpenTelemetry
 REQUESTS_COUNT = meter.create_counter("http_requests_total", "Total number of requests")
 LATENCY = meter.create_histogram("http_request_duration_seconds", "Request latency in seconds")
-ERRORS = meter.create_counter("http_request_errors_total", "Total number of request errors", unit="1")
-POSTS_COUNT = meter.create_gauge("posts_count", "Current number of posts", unit="1")
+ERRORS = meter.create_counter("http_request_errors_total", "Total number of request errors")
+POSTS_COUNT = meter.create_gauge("posts_count", "Current number of posts")
 
 # Inicialização da aplicação Flask
 app = Flask(__name__)
