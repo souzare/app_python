@@ -61,7 +61,7 @@ def index():
     REQUESTS_COUNT.add(1)
     POSTS_COUNT.set(len(posts))
 
-    with LATENCY.record(ammount=1):
+    with LATENCY.record(amount=1):
         return render_template('index.html', posts=posts)
 
 @app.route('/<int:post_id>')
