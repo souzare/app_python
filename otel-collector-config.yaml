@@ -5,7 +5,7 @@ receivers:
       http:
 
 exporters:
-  otlp:
+  otlphttp:
     endpoint: "http://jaeger:14268/api/traces"
     tls:
       insecure: true
@@ -16,7 +16,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [otlp]
+      exporters: [otlphttp]
     metrics:
       receivers: [otlp]
       exporters: [prometheus]
