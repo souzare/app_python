@@ -1,3 +1,5 @@
+version: '3.7'
+
 services:
   otel-collector:
     image: otel/opentelemetry-collector:latest
@@ -12,7 +14,6 @@ services:
       - "9464:9464" # Prometheus Exporter
     networks:
       - monitoring
-      
 
   app_python:
     image: docker.io/doctor1914/flask_docker:latest
@@ -23,7 +24,7 @@ services:
     networks:
       - monitoring
     environment:
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_RESOURCE_ATTRIBUTES=service.name=app_python
     ports:
       - "5000:5000"
@@ -32,10 +33,9 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      - ./prometheus-data:/prometheus-data
-      - prometheus:/prometheus
+      - ./prometheus-data/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
-      - '--config.file=/prometheus-data/prometheus.yml'
+      - '--config.file=/etc/prometheus/prometheus.yml'
       - '--web.enable-lifecycle'
       - '--web.enable-admin-api'
     ports:
@@ -77,8 +77,6 @@ services:
 networks:
   monitoring:
     name: monitoring
-    driver: bridge
 
 volumes:
   grafana-storage:
-  prometheus:

@@ -44,6 +44,22 @@ ERRORS = Counter("http_request_errors_total", "Total number of request errors", 
 # Métrica Gauge para monitorar o número de posts
 POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
+# Configure the tracer provider and exporter
+resource = Resource(attributes={
+    "service.name": "app_python"
+})
+trace.set_tracer_provider(TracerProvider(resource=resource))
+tracer_provider = trace.get_tracer_provider()
+otlp_trace_exporter = OTLPSpanExporter(endpoint="http://otel-collector:4318/v1/traces")
+span_processor = BatchSpanProcessor(otlp_trace_exporter)
+tracer_provider.add_span_processor(span_processor)
+
+# Configure the meter provider and exporter
+otlp_metric_exporter = OTLPMetricExporter(endpoint="http://otel-collector:4318/v1/metrics")
+metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter)
+meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+metrics.set_meter_provider(meter_provider)
+
 @app.before_request
 def before_request():
     request.start_time = time.time()
