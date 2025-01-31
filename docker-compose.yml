@@ -10,10 +10,9 @@ services:
       - "4318:4318" # OTLP HTTP
       - "55680:55680" # OpenCensus
       - "9464:9464" # Prometheus Exporter
-    depends_on:
-      - jaeger
     networks:
       - monitoring
+      
 
   app_python:
     image: docker.io/doctor1914/flask_docker:latest
