@@ -33,7 +33,7 @@ def get_post(post_id):
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '1234'
-metrics = PrometheusMetrics(app)
+prometheus_metrics = PrometheusMetrics(app)
 FlaskInstrumentor().instrument_app(app)
 app.wsgi_app = OpenTelemetryMiddleware(app.wsgi_app)
 
