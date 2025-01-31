@@ -1,3 +1,6 @@
+volumes:
+  grafana-storage:
+  prometheus:
 services:
   prometheus:
     image: prom/prometheus:latest
@@ -17,6 +20,8 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
+    volumes:
+       - grafana-storage:/var/lib/grafana
     ports:
       - "3000:3000"
     depends_on:
