@@ -1,21 +1,13 @@
 # filepath: /c:/GitRepo/app_python/app.py
-import sqlite3
-import os
-from prometheus_client import Counter, Histogram, Gauge
-from prometheus_flask_exporter import PrometheusMetrics
-from opentelemetry import trace, metrics
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
-from opentelemetry.instrumentation.wsgi import OpenTelemetryMiddleware
-import time
 from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
+import sqlite3
+import os
+from prometheus_client import Counter, Histogram, Gauge, generate_latest
+from prometheus_flask_exporter import PrometheusMetrics
+from jaeger_client import Config
+import logging
+import time
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
@@ -33,9 +25,7 @@ def get_post(post_id):
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '1234'
-prometheus_metrics = PrometheusMetrics(app)
-FlaskInstrumentor().instrument_app(app)
-app.wsgi_app = OpenTelemetryMiddleware(app.wsgi_app)
+metrics = PrometheusMetrics(app)
 
 REQUEST = Counter("http_requests_total", "Total number of requests made")
 LATENCY = Histogram("http_request_duration_seconds", "Request latency in seconds")
@@ -44,31 +34,36 @@ ERRORS = Counter("http_request_errors_total", "Total number of request errors", 
 # Métrica Gauge para monitorar o número de posts
 POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
-# Configure the tracer provider and exporter
-resource = Resource(attributes={
-    "service.name": "app_python"
-})
-trace.set_tracer_provider(TracerProvider(resource=resource))
-tracer_provider = trace.get_tracer_provider()
-otlp_trace_exporter = OTLPSpanExporter(endpoint="otel-collector:4317", insecure=True)
-span_processor = BatchSpanProcessor(otlp_trace_exporter)
-tracer_provider.add_span_processor(span_processor)
+# Configurar o Jaeger Tracer
+def init_tracer(service):
+    logging.getLogger('').handlers = []
+    logging.basicConfig(format='%(message)s', level=logging.DEBUG)
 
-# Configure the meter provider and exporter
-otlp_metric_exporter = OTLPMetricExporter(endpoint="otel-collector:4317", insecure=True)
-metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter)
-meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
-metrics.set_meter_provider(meter_provider)
+    config = Config(
+        config={
+            'sampler': {'type': 'const', 'param': 1},
+            'logging': True,
+            'local_agent': {'reporting_host': 'jaeger', 'reporting_port': '6831'},
+        },
+        service_name=service,
+        validate=True,
+    )
+    return config.initialize_tracer()
+
+tracer = init_tracer('app_python')
 
 @app.before_request
 def before_request():
     request.start_time = time.time()
     REQUEST.inc()
+    span = tracer.start_span(request.path)
+    request.span = span
 
 @app.after_request
 def after_request(response):
     request_latency = time.time() - request.start_time
     LATENCY.observe(request_latency)
+    request.span.finish()
     return response
 
 @app.route('/')
@@ -83,6 +78,10 @@ def index():
 def post(post_id):
     post = get_post(post_id)
     return render_template('post.html', post=post)
+
+@app.route('/metrics')
+def metrics():
+    return generate_latest()
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)

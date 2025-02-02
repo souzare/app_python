@@ -1,15 +1,31 @@
 version: '3.7'
 
 services:
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "55680:55680" # OpenCensus
+      - "9464:9464" # Prometheus Exporter
+    networks:
+      - monitoring
+
   app_python:
     image: docker.io/doctor1914/flask_docker:latest
     container_name: app_python
     build: .
+    depends_on:
+      - otel-collector
     networks:
       - monitoring
     environment:
-      - JAEGER_AGENT_HOST=jaeger
-      - JAEGER_AGENT_PORT=6831
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=app_python
     ports:
       - "5000:5000"
 
@@ -24,6 +40,8 @@ services:
       - '--web.enable-admin-api'
     ports:
       - "9090:9090"
+    depends_on:
+      - otel-collector
     networks:
       - monitoring
 

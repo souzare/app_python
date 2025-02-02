@@ -2,6 +2,6 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'otel-collector'
+  - job_name: 'app_python'
     static_configs:
-      - targets: ['otel-collector:9464']
+      - targets: ['app_python:5000']

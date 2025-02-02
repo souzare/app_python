@@ -12,3 +12,4 @@ opentelemetry-instrumentation-flask
 opentelemetry-instrumentation-sqlite3
 opentelemetry-exporter-otlp
 opentelemetry-exporter-otlp-proto-grpc
+jaeger-client
