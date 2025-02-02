@@ -1,13 +1,9 @@
-# filepath: /C:/GitRepo/app_python/app.py
 from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
 import os
-from prometheus_client import Counter, Histogram, Gauge, generate_latest
+from prometheus_client import Counter, Histogram, Gauge
 from prometheus_flask_exporter import PrometheusMetrics
-from jaeger_client import Config
-import logging
-import time
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
@@ -34,54 +30,87 @@ ERRORS = Counter("http_request_errors_total", "Total number of request errors", 
 # Métrica Gauge para monitorar o número de posts
 POSTS_COUNT = Gauge("posts_count", "Current number of posts")
 
-# Configurar o Jaeger Tracer
-def init_tracer(service):
-    logging.getLogger('').handlers = []
-    logging.basicConfig(format='%(message)s', level=logging.DEBUG)
-
-    config = Config(
-        config={
-            'sampler': {'type': 'const', 'param': 1},
-            'logging': True,
-            'local_agent': {'reporting_host': 'jaeger', 'reporting_port': '6831'},
-        },
-        service_name=service,
-        validate=True,
-    )
-    return config.initialize_tracer()
-
-tracer = init_tracer('app_python')
-
-@app.before_request
-def before_request():
-    request.start_time = time.time()
-    REQUEST.inc()
-    span = tracer.start_span(request.path)
-    request.span = span
-
-@app.after_request
-def after_request(response):
-    request_latency = time.time() - request.start_time
-    LATENCY.observe(request_latency)
-    request.span.finish()
-    return response
-
 @app.route('/')
 def index():
     conn = get_db_connection()
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
+    REQUEST.inc()
+
+    # Definir o valor da métrica de Gauge
     POSTS_COUNT.set(len(posts))
+    
+    # Simulating latency measurement
+    with LATENCY.time():
+        return render_template('index.html', posts=posts)
+
+    
+
     return render_template('index.html', posts=posts)
 
-@app.route('/post/<int:post_id>')
+@app.route('/<int:post_id>')
 def post(post_id):
     post = get_post(post_id)
     return render_template('post.html', post=post)
 
-@app.route('/metrics')
-def metrics():
-    return generate_latest()
+@app.route('/create', methods=('GET', 'POST'))
+def create():
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+        if not title:
+            flash('Title is required!')
+        else:
+            conn = get_db_connection()
+            conn.execute('INSERT INTO posts (title, content) VALUES (?, ?)',
+                         (title, content))
+            conn.commit()
+            conn.close()
+            return redirect(url_for('index'))
+    return render_template('create.html')
+
+@app.route('/<int:id>/edit', methods=('GET', 'POST'))
+def edit(id):
+    post = get_post(id)
+
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
+
+        if not title:
+            flash('Title is required!')
+        else:
+            conn = get_db_connection()
+            conn.execute('UPDATE posts SET title = ?, content = ?'
+                         ' WHERE id = ?',
+                         (title, content, id))
+            conn.commit()
+            conn.close()
+            return redirect(url_for('index'))
+
+    return render_template('edit.html', post=post)
+
+@app.route('/<int:id>/delete', methods=('POST',))
+def delete(id):
+    post = get_post(id)
+    conn = get_db_connection()
+    conn.execute('DELETE FROM posts WHERE id = ?', (id,))
+    conn.commit()
+    conn.close()
+    flash('"{}" was successfully deleted!'.format(post['title']))
+    return redirect(url_for('index'))
+
+@app.route('/error')
+def error():
+    # Simulate a 500 Internal Server Error
+    ERRORS.labels(error_type="500").inc()
+    return "Internal Server Error", 500
+
+@app.route('/notfound')
+def not_found():
+    # Simulate a 404 Not Found Error
+    ERRORS.labels(error_type="404").inc()
+    return "Not Found", 404
+
+app.run(host='0.0.0.0', port=5000)
