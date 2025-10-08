@@ -16,14 +16,14 @@ scrape_configs:
 - job_name : app_python
   static_configs:
   - targets:
-    - 44.222.79.229:5000
+    - 34.204.197.239:5000
 
 - job_name: node-interno
   static_configs:
   - targets: 
-    - 172.31.6.129:9100
+    - 172.31.91.230:9100
 
 - job_name: cadvisor
   static_configs:
   - targets:
-    - 172.31.6.129:8081
+    - 172.31.91.230:8081
