@@ -1,0 +1,715 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Demo de SLO/observabilidade e chaos engineering (Prometheus + Grafana +
+  node_exporter + cAdvisor + Redis + app Flask + OTel Collector + agente
+  Gremlin) rodando em ECS (launch type EC2) sobre uma unica instancia EC2.
+  Pensado para subir/derrubar sob demanda em aulas de SRE: create-stack
+  antes da aula, delete-stack depois.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    AllowedValues: [t2.micro, t3.micro, t3.small, t3.medium]
+    Description: >
+      O agente Gremlin sozinho reserva 1024 CPU units / 1024MB de memoria
+      (recomendacao oficial), e agora ha 8 containers no total (incluindo o
+      OTel Collector) - isso nao cabe com folga num t3.micro/t3.small.
+      Default t3.medium (4GiB) da folga real para uma aula ao vivo sem OOM.
+      Use t3.micro/t2.micro apenas se remover o Gremlin e o OTel Collector.
+
+  AllowedCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: >
+      CIDR liberado no Security Group para acessar Grafana/Prometheus/App/SSH.
+      RECOMENDADO: restrinja para o seu IP/32 antes de subir a stack.
+
+  KeyName:
+    Type: String
+    Default: ''
+    Description: >
+      (Opcional) Nome de um EC2 KeyPair existente para acesso via SSH. Deixe
+      em branco para acessar somente via SSM Session Manager (recomendado).
+
+  GrafanaAdminPassword:
+    Type: String
+    Default: admin
+    NoEcho: true
+    Description: Senha do usuario admin do Grafana.
+
+  GremlinTeamID:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    Description: >
+      Team ID do Gremlin (https://app.gremlin.com/settings/teams) - obrigatorio
+      para o agente autenticar no control plane.
+
+  GremlinTeamSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    Description: >
+      Team Secret do Gremlin, gerado junto do Team ID - obrigatorio para o
+      agente autenticar no control plane.
+
+  GremlinAgentVersion:
+    Type: String
+    Default: latest
+    Description: Tag da imagem docker.io/gremlin/gremlin a usar (ex. latest, 2.x.y).
+
+  GremlinClientTags:
+    Type: String
+    Default: ''
+    Description: >
+      (Opcional) Tags do cliente Gremlin no formato chave:valor separadas por
+      virgula (ex. "class:sre-101,env:demo"), usadas para localizar o agente
+      em https://app.gremlin.com/clients/. Deixe em branco para nao definir.
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasGremlinClientTags: !Not [!Equals [!Ref GremlinClientTags, '']]
+
+Resources:
+
+  # ---------------------------------------------------------------------
+  # Rede: VPC minima e auto-contida (nao depende de VPC default da conta)
+  # ---------------------------------------------------------------------
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vpc'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-igw'
+
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-subnet'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-rt'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGWAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub '${AWS::StackName} - acesso a demo de SLO'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedCidr
+          Description: SSH (fallback, opcional)
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: !Ref AllowedCidr
+          Description: Grafana
+        - IpProtocol: tcp
+          FromPort: 9090
+          ToPort: 9090
+          CidrIp: !Ref AllowedCidr
+          Description: Prometheus
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: !Ref AllowedCidr
+          Description: App Flask
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref AllowedCidr
+          Description: cAdvisor
+        - IpProtocol: tcp
+          FromPort: 9100
+          ToPort: 9100
+          CidrIp: !Ref AllowedCidr
+          Description: node_exporter
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-sg'
+
+  # ---------------------------------------------------------------------
+  # IAM: role da instancia EC2 (agente ECS + SSM + logs)
+  # ---------------------------------------------------------------------
+  ECSInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-ecs-instance-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ecs-task-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LogGroup.Arn
+
+  ECSInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref ECSInstanceRole
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${AWS::StackName}'
+      RetentionInDays: 3
+
+  # ---------------------------------------------------------------------
+  # ECS Cluster
+  # ---------------------------------------------------------------------
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${AWS::StackName}-cluster'
+
+  # ---------------------------------------------------------------------
+  # EC2: instancia unica registrada como container instance do cluster.
+  # Sem Auto Scaling Group / Launch Template de proposito: e uma demo de
+  # sala de aula com 1 instancia so, ligar/desligar = create/delete stack.
+  # ---------------------------------------------------------------------
+  ECSInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: '{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id}}'
+      IamInstanceProfile: !Ref ECSInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ecs-host'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+
+          mkdir -p /opt/monitoring/prometheus /opt/monitoring/prometheus-data \
+                   /opt/monitoring/grafana-data /opt/monitoring/redis-data
+          chmod 777 /opt/monitoring/grafana-data /opt/monitoring/prometheus-data /opt/monitoring/redis-data
+
+          mkdir -p /var/lib/gremlin/executions /var/log/gremlin
+
+          mkdir -p /opt/monitoring/otel-collector
+          cat > /opt/monitoring/otel-collector/otel-collector-config.yaml << 'EOF'
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                http:
+          processors:
+            batch:
+          exporters:
+            prometheus:
+              endpoint: "0.0.0.0:9464"
+          service:
+            pipelines:
+              metrics:
+                receivers: [otlp]
+                processors: [batch]
+                exporters: [prometheus]
+          EOF
+
+          cat > /opt/monitoring/prometheus/prometheus.yml << 'EOF'
+          global:
+            scrape_interval: 5s
+          scrape_configs:
+            - job_name: prometheus
+              static_configs:
+                - targets: ['localhost:9090']
+            - job_name: otel-collector
+              static_configs:
+                - targets: ['localhost:9464']
+            - job_name: node_exporter
+              static_configs:
+                - targets: ['localhost:9100']
+            - job_name: cadvisor
+              static_configs:
+                - targets: ['localhost:8080']
+          EOF
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref ECSInstance
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-eip'
+
+  # ---------------------------------------------------------------------
+  # Task Definitions + Services (launch type EC2, network mode host)
+  # Todos os containers ficam na mesma instancia, se enxergam via
+  # localhost - igual ao node_exporter/cadvisor do docker-compose original.
+  # ---------------------------------------------------------------------
+
+  PrometheusTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-prometheus'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      Volumes:
+        - Name: prometheus-config
+          Host:
+            SourcePath: /opt/monitoring/prometheus
+        - Name: prometheus-data
+          Host:
+            SourcePath: /opt/monitoring/prometheus-data
+      ContainerDefinitions:
+        - Name: prometheus
+          Image: prom/prometheus:latest
+          Essential: true
+          MemoryReservation: 128
+          Command:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--web.enable-admin-api'
+          MountPoints:
+            - SourceVolume: prometheus-config
+              ContainerPath: /etc/prometheus
+              ReadOnly: true
+            - SourceVolume: prometheus-data
+              ContainerPath: /prometheus
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: prometheus
+
+  GrafanaTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-grafana'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      Volumes:
+        - Name: grafana-data
+          Host:
+            SourcePath: /opt/monitoring/grafana-data
+      ContainerDefinitions:
+        - Name: grafana
+          Image: grafana/grafana:latest
+          Essential: true
+          MemoryReservation: 128
+          Environment:
+            - Name: GF_SECURITY_ADMIN_PASSWORD
+              Value: !Ref GrafanaAdminPassword
+          MountPoints:
+            - SourceVolume: grafana-data
+              ContainerPath: /var/lib/grafana
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: grafana
+
+  NodeExporterTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-node-exporter'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      Volumes:
+        - Name: host-root
+          Host:
+            SourcePath: /
+      ContainerDefinitions:
+        - Name: node_exporter
+          Image: quay.io/prometheus/node-exporter:latest
+          Essential: true
+          MemoryReservation: 32
+          Command:
+            - '--path.rootfs=/host'
+          MountPoints:
+            - SourceVolume: host-root
+              ContainerPath: /host
+              ReadOnly: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: node-exporter
+
+  CadvisorTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-cadvisor'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      Volumes:
+        - Name: rootfs
+          Host:
+            SourcePath: /
+        - Name: var-run
+          Host:
+            SourcePath: /var/run
+        - Name: sys
+          Host:
+            SourcePath: /sys
+        - Name: docker
+          Host:
+            SourcePath: /var/lib/docker
+      ContainerDefinitions:
+        - Name: cadvisor
+          Image: gcr.io/cadvisor/cadvisor:latest
+          Essential: true
+          MemoryReservation: 64
+          MountPoints:
+            - SourceVolume: rootfs
+              ContainerPath: /rootfs
+              ReadOnly: true
+            - SourceVolume: var-run
+              ContainerPath: /var/run
+              ReadOnly: false
+            - SourceVolume: sys
+              ContainerPath: /sys
+              ReadOnly: true
+            - SourceVolume: docker
+              ContainerPath: /var/lib/docker
+              ReadOnly: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: cadvisor
+
+  RedisTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-redis'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      Volumes:
+        - Name: redis-data
+          Host:
+            SourcePath: /opt/monitoring/redis-data
+      ContainerDefinitions:
+        - Name: redis
+          Image: redis:latest
+          Essential: true
+          MemoryReservation: 32
+          MountPoints:
+            - SourceVolume: redis-data
+              ContainerPath: /data
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: redis
+
+  OtelCollectorTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-otel-collector'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      Volumes:
+        - Name: otel-collector-config
+          Host:
+            SourcePath: /opt/monitoring/otel-collector
+      ContainerDefinitions:
+        - Name: otel-collector
+          Image: otel/opentelemetry-collector-contrib:latest
+          Essential: true
+          MemoryReservation: 128
+          Command:
+            - '--config=/etc/otel/otel-collector-config.yaml'
+          MountPoints:
+            - SourceVolume: otel-collector-config
+              ContainerPath: /etc/otel
+              ReadOnly: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: otel-collector
+
+  AppPythonTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-app-python'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      ContainerDefinitions:
+        - Name: app_python
+          Image: docker.io/doctor1914/flask_docker:latest
+          Essential: true
+          MemoryReservation: 64
+          Environment:
+            - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+              Value: http://localhost:4317
+            - Name: OTEL_SERVICE_NAME
+              Value: app_python
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: app-python
+
+  # Agente Gremlin (chaos engineering) - so funciona em ECS com launch type
+  # EC2 (nao Fargate), precisa de network/pid mode host e de capabilities
+  # elevadas para injetar falhas no host/containers. Ver:
+  # https://www.gremlin.com/docs/installing-gremlin-on-amazon-ecs
+  GremlinTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${AWS::StackName}-gremlin'
+      RequiresCompatibilities: [EC2]
+      NetworkMode: host
+      PidMode: host
+      Cpu: '1024'
+      Memory: '1024'
+      Volumes:
+        - Name: cgroup-root
+          Host:
+            SourcePath: /sys/fs/cgroup
+        - Name: docker-socket
+          Host:
+            SourcePath: /var/run/docker.sock
+        - Name: gremlin-state
+          Host:
+            SourcePath: /var/lib/gremlin/executions
+        - Name: gremlin-logs
+          Host:
+            SourcePath: /var/log/gremlin
+      ContainerDefinitions:
+        - Name: gremlin
+          Image: !Sub 'docker.io/gremlin/gremlin:${GremlinAgentVersion}'
+          Essential: true
+          Command: [daemon]
+          Environment:
+            - Name: GREMLIN_TEAM_ID
+              Value: !Ref GremlinTeamID
+            - Name: GREMLIN_TEAM_SECRET
+              Value: !Ref GremlinTeamSecret
+            - !If
+              - HasGremlinClientTags
+              - Name: GREMLIN_CLIENT_TAGS
+                Value: !Ref GremlinClientTags
+              - !Ref 'AWS::NoValue'
+          LinuxParameters:
+            Capabilities:
+              Add:
+                - DAC_READ_SEARCH
+                - KILL
+                - NET_ADMIN
+                - NET_RAW
+                - SYS_ADMIN
+                - SYS_BOOT
+                - SYS_PTRACE
+                - SYS_RESOURCE
+                - SYS_TIME
+          MountPoints:
+            - SourceVolume: cgroup-root
+              ContainerPath: /sys/fs/cgroup
+            - SourceVolume: docker-socket
+              ContainerPath: /var/run/docker.sock
+            - SourceVolume: gremlin-state
+              ContainerPath: /var/lib/gremlin/executions
+            - SourceVolume: gremlin-logs
+              ContainerPath: /var/log/gremlin
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: gremlin
+
+  PrometheusService:
+    Type: AWS::ECS::Service
+    DependsOn: ECSInstance
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref PrometheusTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  GrafanaService:
+    Type: AWS::ECS::Service
+    DependsOn: ECSInstance
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref GrafanaTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  NodeExporterService:
+    Type: AWS::ECS::Service
+    DependsOn: ECSInstance
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref NodeExporterTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  CadvisorService:
+    Type: AWS::ECS::Service
+    DependsOn: ECSInstance
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref CadvisorTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  RedisService:
+    Type: AWS::ECS::Service
+    DependsOn: ECSInstance
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref RedisTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  OtelCollectorService:
+    Type: AWS::ECS::Service
+    DependsOn: ECSInstance
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref OtelCollectorTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  AppPythonService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ECSInstance
+      - OtelCollectorService
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref AppPythonTaskDefinition
+      DesiredCount: 1
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  GremlinService:
+    Type: AWS::ECS::Service
+    DependsOn: ECSInstance
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref GremlinTaskDefinition
+      LaunchType: EC2
+      SchedulingStrategy: DAEMON
+
+Outputs:
+  PublicIP:
+    Description: IP publico fixo da instancia (Elastic IP)
+    Value: !Ref ElasticIP
+
+  GrafanaURL:
+    Description: URL do Grafana (login admin / senha do parametro GrafanaAdminPassword)
+    Value: !Sub 'http://${ElasticIP}:3000'
+
+  PrometheusURL:
+    Description: URL do Prometheus
+    Value: !Sub 'http://${ElasticIP}:9090'
+
+  AppURL:
+    Description: URL da aplicacao Flask
+    Value: !Sub 'http://${ElasticIP}:5000'
+
+  CadvisorURL:
+    Description: URL do cAdvisor
+    Value: !Sub 'http://${ElasticIP}:8080'
+
+  NodeExporterMetricsURL:
+    Description: Endpoint de metricas do node_exporter
+    Value: !Sub 'http://${ElasticIP}:9100/metrics'
+
+  SSMSessionCommand:
+    Description: Comando para acessar a instancia sem SSH, via SSM Session Manager
+    Value: !Sub 'aws ssm start-session --target ${ECSInstance}'
+
+  GremlinVerifyURL:
+    Description: >
+      Apos o deploy, confira em app.gremlin.com que o agente registrou -
+      filtre pela tag platform=ecs
+    Value: https://app.gremlin.com/clients/

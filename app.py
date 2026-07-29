@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 import sqlite3
-import os
-from prometheus_client import Counter, Histogram, Gauge
-from prometheus_flask_exporter import PrometheusMetrics
+import time
+
+from opentelemetry.metrics import Observation
+
+from telemetry import setup_telemetry
 
 def get_db_connection():
     conn = sqlite3.connect('database.db')
@@ -21,31 +23,42 @@ def get_post(post_id):
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '1234'
-metrics = PrometheusMetrics(app)
+meter = setup_telemetry(app, service_name="app_python")
 
-REQUEST = Counter("http_requests_total", "Total number of requests made")
-LATENCY = Histogram("http_request_duration_seconds", "Request latency in seconds")
-ERRORS = Counter("http_request_errors_total", "Total number of request errors", ["error_type"])
+REQUEST_COUNTER = meter.create_counter(
+    "http_requests_total", description="Total number of requests made")
+LATENCY_HISTOGRAM = meter.create_histogram(
+    "http_request_duration_seconds", unit="s", description="Request latency in seconds")
+ERROR_COUNTER = meter.create_counter(
+    "http_request_errors_total", description="Total number of request errors")
 
-# Métrica Gauge para monitorar o número de posts
-POSTS_COUNT = Gauge("posts_count", "Current number of posts")
+def _posts_count_callback(options):
+    conn = get_db_connection()
+    count = conn.execute('SELECT COUNT(*) FROM posts').fetchone()[0]
+    conn.close()
+    yield Observation(count)
+
+meter.create_observable_gauge(
+    "posts_count",
+    callbacks=[_posts_count_callback],
+    description="Current number of posts",
+)
+
+@app.before_request
+def before_request():
+    request.start_time = time.time()
+    REQUEST_COUNTER.add(1)
+
+@app.after_request
+def after_request(response):
+    LATENCY_HISTOGRAM.record(time.time() - request.start_time)
+    return response
 
 @app.route('/')
 def index():
     conn = get_db_connection()
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
-    REQUEST.inc()
-
-    # Definir o valor da métrica de Gauge
-    POSTS_COUNT.set(len(posts))
-    
-    # Simulating latency measurement
-    with LATENCY.time():
-        return render_template('index.html', posts=posts)
-
-    
-
     return render_template('index.html', posts=posts)
 
 @app.route('/<int:post_id>')
@@ -104,13 +117,14 @@ def delete(id):
 @app.route('/error')
 def error():
     # Simulate a 500 Internal Server Error
-    ERRORS.labels(error_type="500").inc()
+    ERROR_COUNTER.add(1, {"error_type": "500"})
     return "Internal Server Error", 500
 
 @app.route('/notfound')
 def not_found():
     # Simulate a 404 Not Found Error
-    ERRORS.labels(error_type="404").inc()
+    ERROR_COUNTER.add(1, {"error_type": "404"})
     return "Not Found", 404
 
-app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=5000)

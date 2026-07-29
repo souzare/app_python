@@ -14,6 +14,8 @@ services:
       - prometheus:/prometheus
     ports:
       - 9090:9090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   grafana:
     image: grafana/grafana
     container_name: grafana
@@ -50,8 +52,25 @@ services:
     container_name: redis
     ports:
     - 6379:6379
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command:
+      - '--config=/etc/otel-collector-config.yaml'
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+    - 4317:4317
+    - 4318:4318
+    - 9464:9464
   python:
+    build: .
     image: docker.io/doctor1914/flask_docker:latest
     container_name: app_python
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=app_python
+    depends_on:
+    - otel-collector
     ports:
     - 5000:5000

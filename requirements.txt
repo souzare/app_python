@@ -4,12 +4,8 @@ Flask==2.3.2
 itsdangerous==2.1.2
 Jinja2==3.1.2
 MarkupSafe==2.1.3
-prometheus-client==0.17.1
-prometheus-flask-exporter==0.22.4
 Werkzeug==2.3.6
-opentelemetry-sdk
-opentelemetry-instrumentation-flask
-opentelemetry-instrumentation-sqlite3
-opentelemetry-exporter-otlp
-opentelemetry-exporter-otlp-proto-grpc
-jaeger-client
+opentelemetry-api==1.44.0
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp-proto-grpc==1.44.0
+opentelemetry-instrumentation-flask==0.65b0
